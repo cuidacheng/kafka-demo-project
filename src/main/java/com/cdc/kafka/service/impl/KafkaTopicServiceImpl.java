@@ -7,6 +7,7 @@ import com.cdc.kafka.service.KafkaTopicService;
 import com.cdc.kafka.utils.ValidationUtil;
 import kafka.utils.Json;
 import org.apache.kafka.clients.CommonClientConfigs;
+import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.CreateTopicsResult;
 import org.apache.kafka.clients.admin.DeleteTopicsResult;
 import org.apache.kafka.clients.admin.KafkaAdminClient;
@@ -24,6 +25,7 @@ import javax.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -46,6 +48,7 @@ public class KafkaTopicServiceImpl implements KafkaTopicService {
     private static final String DEFAULT_BOOTSTRAP_SERVERS = "localhost:9092";
 
     private String bootstrapServers;
+    private AdminClient adminClient;
 
     @Autowired
     private Environment environment;
@@ -53,6 +56,9 @@ public class KafkaTopicServiceImpl implements KafkaTopicService {
     @PostConstruct
     void initMethod() {
         bootstrapServers = environment.getProperty("zookeeper.server.url", DEFAULT_BOOTSTRAP_SERVERS);
+        Properties properties = new Properties();
+        properties.setProperty(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        adminClient = KafkaAdminClient.create(properties);
     }
 
     @Override
@@ -78,11 +84,9 @@ public class KafkaTopicServiceImpl implements KafkaTopicService {
         }
 
         // 创建topic
-        Properties properties = new Properties();
-        properties.setProperty(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        NewTopic newTopic = new NewTopic(topicEntity.getTopicName(), topicEntity.getPartition().intValue(),
-                topicEntity.getReplication().shortValue());
-        CreateTopicsResult topicsResult = KafkaAdminClient.create(properties).createTopics(Arrays.asList(newTopic));
+        NewTopic newTopic = new NewTopic(topicEntity.getTopicName(), topicEntity.getPartition(),
+                topicEntity.getReplication());
+        CreateTopicsResult topicsResult = adminClient.createTopics(Collections.singletonList(newTopic));
         try {
             topicsResult.all().get(5, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
@@ -105,12 +109,11 @@ public class KafkaTopicServiceImpl implements KafkaTopicService {
 
     @Override
     public List<String> listTopic() throws KafkaException {
-        Properties properties = new Properties();
-        properties.setProperty(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+
         // 调kafka接口获取topic列表
-        ListTopicsResult listTopicsResult = KafkaAdminClient.create(properties).listTopics();
+        ListTopicsResult listTopicsResult = adminClient.listTopics();
         KafkaFuture<Set<String>> names = listTopicsResult.names();
-        Set<String> topicNameSet = null;
+        Set<String> topicNameSet;
         try {
             topicNameSet = names.get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
@@ -143,7 +146,7 @@ public class KafkaTopicServiceImpl implements KafkaTopicService {
             throw new KafkaException(KafkaErrorEnumConstant.TOPIC_EMPTY_EXIST);
         }
         // 获取kafka中存在且需要被删除的topic
-        List<String> topicToBeDeleted = topicListExistInKafka.stream().filter(topic -> topicNames.contains(topic))
+        List<String> topicToBeDeleted = topicListExistInKafka.stream().filter(topicNames::contains)
                 .collect(Collectors.toList());
         // kafka配置里要删除的topic不存在的列表
         List<String> topicNotExist = topicNames.stream().filter(topic -> !topicListExistInKafka.contains(topic))
@@ -151,14 +154,15 @@ public class KafkaTopicServiceImpl implements KafkaTopicService {
         if (ValidationUtil.emptyList(topicToBeDeleted)) {
             throw new KafkaException(KafkaErrorEnumConstant.TOPIC_DELETE_TOPIC_EMPTY);
         }
-        Properties properties = new Properties();
-        properties.setProperty(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        DeleteTopicsResult deleteTopicsResult = KafkaAdminClient.create(properties).deleteTopics(topicToBeDeleted);
+        // 删除topic
+        DeleteTopicsResult deleteTopicsResult = adminClient.deleteTopics(topicToBeDeleted);
         Map<String, KafkaFuture<Void>> futuresMap = deleteTopicsResult.values();
         List<String> topicDeleteFailList = new ArrayList<>();
+        List<String> topicDeleteSuccessList = new ArrayList<>();
         futuresMap.forEach((topicName, future) -> {
             try {
                 future.get(20, TimeUnit.SECONDS);
+                topicDeleteSuccessList.add(topicName);
             } catch (Exception e) {
                 logger.error("KafkaTopicServiceImpl::deleteTopic delete topic fail! topicName = {}, errorMsg = {}",
                         topicName, e.getMessage());
@@ -166,15 +170,11 @@ public class KafkaTopicServiceImpl implements KafkaTopicService {
             }
         });
         if (!ValidationUtil.emptyList(topicDeleteFailList)) {
-            StringBuilder stringBuilder = new StringBuilder("");
-            stringBuilder.append("需要删除的topic列表：")
-                    .append(String.join(",", topicNames))
-                    .append("成功删除的topic列表：")
-                    .append("不存在的topic列表： ")
-                    .append(String.join(",", topicNotExist))
-                    .append("删除失败的topic列表：")
-                    .append(String.join(",", topicDeleteFailList));
-            throw new KafkaException(KafkaErrorEnumConstant.EXCEPTION_FAIL.getErrorCode(), stringBuilder.toString());
+            String errorMsg = "需要删除的topic列表：" + String.join(",", topicNames)
+                    + "成功删除的topic列表：" + String.join(",", topicDeleteSuccessList)
+                    + "不存在的topic列表：" + String.join(",", topicNotExist)
+                    + "删除失败的topic列表：" + String.join(",", topicDeleteFailList);
+            throw new KafkaException(KafkaErrorEnumConstant.EXCEPTION_FAIL.getErrorCode(), errorMsg);
         }
     }
 
