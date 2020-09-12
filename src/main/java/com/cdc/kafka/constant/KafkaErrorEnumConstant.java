@@ -2,6 +2,7 @@ package com.cdc.kafka.constant;
 
 /**
  * 错误码和错误信息
+ *
  * @author cuidc
  * @date 2020-09-11
  */

@@ -83,6 +83,7 @@ public class TopicEntity implements Serializable {
         this.describe = describe;
         return this;
     }
+
     public String getAcks() {
         return acks;
     }
@@ -123,30 +124,30 @@ public class TopicEntity implements Serializable {
         this.retries = retries;
     }
 
-  @Override
-  public String toString() {
-    return "TopicEntity{"
-        + "topicName='"
-        + topicName
-        + '\''
-        + ", partition="
-        + partition
-        + ", replication="
-        + replication
-        + ", acks='"
-        + acks
-        + '\''
-        + ", batchSize="
-        + batchSize
-        + ", bufferMemory="
-        + bufferMemory
-        + ", lingerMs="
-        + lingerMs
-        + ", retries="
-        + retries
-        + ", describe='"
-        + describe
-        + '\''
-        + '}';
-  }
+    @Override
+    public String toString() {
+        return "TopicEntity{"
+                + "topicName='"
+                + topicName
+                + '\''
+                + ", partition="
+                + partition
+                + ", replication="
+                + replication
+                + ", acks='"
+                + acks
+                + '\''
+                + ", batchSize="
+                + batchSize
+                + ", bufferMemory="
+                + bufferMemory
+                + ", lingerMs="
+                + lingerMs
+                + ", retries="
+                + retries
+                + ", describe='"
+                + describe
+                + '\''
+                + '}';
+    }
 }
