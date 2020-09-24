@@ -1,5 +1,6 @@
 package com.cdc.kafka.service.impl;
 
+import com.cdc.kafka.config.KafkaConfig;
 import com.cdc.kafka.constant.KafkaErrorEnumConstant;
 import com.cdc.kafka.entity.TopicEntity;
 import com.cdc.kafka.exception.KafkaException;
@@ -23,9 +24,7 @@ import org.springframework.util.StringUtils;
 
 import javax.annotation.PostConstruct;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -45,20 +44,22 @@ public class KafkaTopicServiceImpl implements KafkaTopicService {
      * 默认超时时间5s
      */
     private static final Integer DEFAULT_TIMEOUT = 5000;
-    private static final String DEFAULT_BOOTSTRAP_SERVERS = "localhost:9092";
 
-    private String bootstrapServers;
     private AdminClient adminClient;
+    private String bootstrapServers;
 
     @Autowired
     private Environment environment;
+    @Autowired
+    private KafkaConfig kafkaConfig;
 
     @PostConstruct
     void initMethod() {
-        bootstrapServers = environment.getProperty("zookeeper.server.url", DEFAULT_BOOTSTRAP_SERVERS);
         Properties properties = new Properties();
-        properties.setProperty(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        properties.setProperty(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, kafkaConfig.getBootstrapServers());
         adminClient = KafkaAdminClient.create(properties);
+        bootstrapServers = kafkaConfig.getBootstrapServers();
+
     }
 
     @Override
